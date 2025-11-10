@@ -19,7 +19,7 @@ const CLASSROOM_LATLNG = leaflet.latLng(
 // Game parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const CELL_SIZE = 0.0001; // degrees per cell (about the size of a house)
-const INTERACTION_DISTANCE = 3; // cells away player can interact
+const _INTERACTION_DISTANCE = 3; // cells away player can interact (will be used in Step 2)
 
 // Create UI elements
 const statusPanelDiv = document.createElement("div");
