@@ -2,42 +2,35 @@
 import leaflet from "leaflet";
 
 // Style sheets
-import "leaflet/dist/leaflet.css"; // supporting style for Leaflet
-import "./style.css"; // student-controlled page style
+import "leaflet/dist/leaflet.css";
+import "./style.css";
 
 // Fix missing marker images
-import "./_leafletWorkaround.ts"; // fixes for missing Leaflet images
+import "./_leafletWorkaround.ts";
 
 // Import our luck function
-import luck from "./_luck.ts";
 
-// Create basic UI elements
-
-const controlPanelDiv = document.createElement("div");
-controlPanelDiv.id = "controlPanel";
-document.body.append(controlPanelDiv);
-
-const mapDiv = document.createElement("div");
-mapDiv.id = "map";
-document.body.append(mapDiv);
-
-const statusPanelDiv = document.createElement("div");
-statusPanelDiv.id = "statusPanel";
-document.body.append(statusPanelDiv);
-
-// Our classroom location
+// Classroom location (fixed player position)
 const CLASSROOM_LATLNG = leaflet.latLng(
   36.997936938057016,
   -122.05703507501151,
 );
 
-// Tunable gameplay parameters
+// Game parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
-const TILE_DEGREES = 1e-4;
-const NEIGHBORHOOD_SIZE = 8;
-const CACHE_SPAWN_PROBABILITY = 0.1;
+const CELL_SIZE = 0.0001; // degrees per cell (about the size of a house)
+const INTERACTION_DISTANCE = 3; // cells away player can interact
 
-// Create the map (element with id "map" is defined in index.html)
+// Create UI elements
+const statusPanelDiv = document.createElement("div");
+statusPanelDiv.id = "statusPanel";
+document.body.append(statusPanelDiv);
+
+const mapDiv = document.createElement("div");
+mapDiv.id = "map";
+document.body.append(mapDiv);
+
+// Create the map
 const map = leaflet.map(mapDiv, {
   center: CLASSROOM_LATLNG,
   zoom: GAMEPLAY_ZOOM_LEVEL,
@@ -47,7 +40,7 @@ const map = leaflet.map(mapDiv, {
   scrollWheelZoom: false,
 });
 
-// Populate the map with a background tile layer
+// Add background tile layer
 leaflet
   .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -56,60 +49,66 @@ leaflet
   })
   .addTo(map);
 
-// Add a marker to represent the player
+// Add player marker
 const playerMarker = leaflet.marker(CLASSROOM_LATLNG);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
-// Display the player's points
-let playerPoints = 0;
-statusPanelDiv.innerHTML = "No points yet...";
+// Calculate visible bounds to determine grid size
+// We'll create a large grid that covers the visible area
+const VISIBLE_GRID_SIZE = 50; // cells in each direction from center
 
-// Add caches to the map by cell numbers
-function spawnCache(i: number, j: number) {
-  // Convert cell numbers into lat/lng bounds
-  const origin = CLASSROOM_LATLNG;
-  const bounds = leaflet.latLngBounds([
-    [origin.lat + i * TILE_DEGREES, origin.lng + j * TILE_DEGREES],
-    [origin.lat + (i + 1) * TILE_DEGREES, origin.lng + (j + 1) * TILE_DEGREES],
-  ]);
-
-  // Add a rectangle to the map to represent the cache
-  const rect = leaflet.rectangle(bounds);
-  rect.addTo(map);
-
-  // Handle interactions with the cache
-  rect.bindPopup(() => {
-    // Each cache has a random point value, mutable by the player
-    let pointValue = Math.floor(luck([i, j, "initialValue"].toString()) * 100);
-
-    // The popup offers a description and button
-    const popupDiv = document.createElement("div");
-    popupDiv.innerHTML = `
-                <div>There is a cache here at "${i},${j}". It has value <span id="value">${pointValue}</span>.</div>
-                <button id="poke">poke</button>`;
-
-    // Clicking the button decrements the cache's value and increments the player's points
-    popupDiv
-      .querySelector<HTMLButtonElement>("#poke")!
-      .addEventListener("click", () => {
-        pointValue--;
-        popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-          pointValue.toString();
-        playerPoints++;
-        statusPanelDiv.innerHTML = `${playerPoints} points accumulated`;
-      });
-
-    return popupDiv;
-  });
+// Cell data structure to track cell state
+interface Cell {
+  i: number;
+  j: number;
+  rectangle: leaflet.Rectangle;
+  tokenValue: number | null;
 }
 
-// Look around the player's neighborhood for caches to spawn
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-    // If location i,j is lucky enough, spawn a cache!
-    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(i, j);
-    }
+// Store all cells
+const cells = new Map<string, Cell>();
+
+// Convert cell coordinates (i, j) to lat/lng bounds
+function cellToBounds(i: number, j: number): leaflet.LatLngBounds {
+  return leaflet.latLngBounds([
+    [
+      CLASSROOM_LATLNG.lat + i * CELL_SIZE,
+      CLASSROOM_LATLNG.lng + j * CELL_SIZE,
+    ],
+    [
+      CLASSROOM_LATLNG.lat + (i + 1) * CELL_SIZE,
+      CLASSROOM_LATLNG.lng + (j + 1) * CELL_SIZE,
+    ],
+  ]);
+}
+
+// Create a cell at grid position (i, j)
+function createCell(i: number, j: number): Cell {
+  const bounds = cellToBounds(i, j);
+  const rectangle = leaflet.rectangle(bounds, {
+    color: "#3388ff",
+    weight: 1,
+    fillOpacity: 0.1,
+  });
+  rectangle.addTo(map);
+
+  return {
+    i,
+    j,
+    rectangle,
+    tokenValue: null, // Will be set in Step 2
+  };
+}
+
+// Create grid of cells covering visible area
+for (let i = -VISIBLE_GRID_SIZE; i < VISIBLE_GRID_SIZE; i++) {
+  for (let j = -VISIBLE_GRID_SIZE; j < VISIBLE_GRID_SIZE; j++) {
+    const cellKey = `${i},${j}`;
+    const cell = createCell(i, j);
+    cells.set(cellKey, cell);
   }
 }
+
+// Initialize status panel
+statusPanelDiv.innerHTML = "Ready to play!";
