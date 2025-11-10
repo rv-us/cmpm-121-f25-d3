@@ -28,6 +28,10 @@ const statusPanelDiv = document.createElement("div");
 statusPanelDiv.id = "statusPanel";
 document.body.append(statusPanelDiv);
 
+const inventoryPanelDiv = document.createElement("div");
+inventoryPanelDiv.id = "inventoryPanel";
+document.body.append(inventoryPanelDiv);
+
 const mapDiv = document.createElement("div");
 mapDiv.id = "map";
 document.body.append(mapDiv);
@@ -72,9 +76,15 @@ interface Cell {
 // Store all cells
 const cells = new Map<string, Cell>();
 
-// Player is at cell (0, 0)
-const PLAYER_CELL_I = 0;
-const PLAYER_CELL_J = 0;
+// Player position (starts at cell 0, 0)
+let playerCellI = 0;
+let playerCellJ = 0;
+
+// Inventory system - player can hold at most one token
+let playerInventory: number | null = null;
+
+// Win condition values
+const WIN_TOKEN_VALUES = [8, 16];
 
 // Convert cell coordinates (i, j) to lat/lng bounds
 function cellToBounds(i: number, j: number): leaflet.LatLngBounds {
@@ -105,7 +115,7 @@ function cellDistance(i1: number, j1: number, i2: number, j2: number): number {
 
 // Check if a cell is within interaction distance
 function isInteractable(i: number, j: number): boolean {
-  return cellDistance(i, j, PLAYER_CELL_I, PLAYER_CELL_J) <=
+  return cellDistance(i, j, playerCellI, playerCellJ) <=
     INTERACTION_DISTANCE;
 }
 
@@ -150,18 +160,22 @@ function updateCellVisual(cell: Cell): void {
       const icon = leaflet.divIcon({
         className: "token-marker",
         html:
-          `<div style="background-color: gold; border: 3px solid black; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; color: black; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${cell.tokenValue}</div>`,
+          `<div style="background-color: gold; border: 3px solid black; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; color: black; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer;">${cell.tokenValue}</div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 15],
       });
       cell.marker = leaflet.marker(center, { icon });
       cell.marker.addTo(map);
+      // Make token marker clickable
+      cell.marker.on("click", () => {
+        handleTokenClick(cell);
+      });
     } else {
       // Update existing marker
       const icon = leaflet.divIcon({
         className: "token-marker",
         html:
-          `<div style="background-color: gold; border: 3px solid black; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; color: black; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${cell.tokenValue}</div>`,
+          `<div style="background-color: gold; border: 3px solid black; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; color: black; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer;">${cell.tokenValue}</div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 15],
       });
@@ -208,18 +222,70 @@ function createCell(i: number, j: number): Cell {
   return cell;
 }
 
+// Update inventory display
+function updateInventoryDisplay(): void {
+  if (playerInventory !== null) {
+    inventoryPanelDiv.innerHTML = `Inventory: Token value ${playerInventory}`;
+    // Check win condition
+    if (WIN_TOKEN_VALUES.includes(playerInventory)) {
+      inventoryPanelDiv.innerHTML +=
+        ` 🎉 WIN! You have a token of value ${playerInventory}!`;
+      statusPanelDiv.innerHTML = "Congratulations! You've won the game!";
+    }
+  } else {
+    inventoryPanelDiv.innerHTML = "Inventory: Empty";
+  }
+}
+
+// Handle token marker click
+function handleTokenClick(cell: Cell): void {
+  handleCellInteraction(cell);
+}
+
 // Handle cell click
 function handleCellClick(cell: Cell): void {
+  handleCellInteraction(cell);
+}
+
+// Common handler for cell/token interactions
+function handleCellInteraction(cell: Cell): void {
   if (!isInteractable(cell.i, cell.j)) {
     statusPanelDiv.innerHTML =
       "Too far away! You can only interact with nearby cells.";
     return;
   }
 
-  if (cell.tokenValue !== null) {
+  // If player has a token and cell has a token, try crafting
+  if (playerInventory !== null && cell.tokenValue !== null) {
+    if (playerInventory === cell.tokenValue) {
+      // Craft: combine two tokens of equal value to create double value
+      const newValue = playerInventory * 2;
+      cell.tokenValue = newValue;
+      playerInventory = null; // Remove token from inventory
+      updateCellVisual(cell);
+      updateInventoryDisplay();
+      statusPanelDiv.innerHTML =
+        `Crafted! Created token with value ${newValue} in cell (${cell.i}, ${cell.j}).`;
+    } else {
+      statusPanelDiv.innerHTML =
+        `Cannot craft! Cell has token value ${cell.tokenValue}, but you have ${playerInventory}. Tokens must match to craft.`;
+    }
+    return;
+  }
+
+  // If player has no token and cell has a token, pick it up
+  if (playerInventory === null && cell.tokenValue !== null) {
+    playerInventory = cell.tokenValue;
+    cell.tokenValue = null; // Remove token from cell
+    updateCellVisual(cell);
+    updateInventoryDisplay();
     statusPanelDiv.innerHTML =
-      `Cell (${cell.i}, ${cell.j}) contains token with value ${cell.tokenValue}.`;
-  } else {
+      `Picked up token with value ${playerInventory} from cell (${cell.i}, ${cell.j}).`;
+    return;
+  }
+
+  // If both are empty
+  if (playerInventory === null && cell.tokenValue === null) {
     statusPanelDiv.innerHTML = `Cell (${cell.i}, ${cell.j}) is empty.`;
   }
 }
@@ -237,5 +303,70 @@ for (let i = -VISIBLE_GRID_SIZE; i < VISIBLE_GRID_SIZE; i++) {
   }
 }
 
-// Initialize status panel
-statusPanelDiv.innerHTML = `Ready to play! Tokens spawned: ${tokenCount}`;
+// Move player to a new cell position
+function movePlayer(newI: number, newJ: number): void {
+  playerCellI = newI;
+  playerCellJ = newJ;
+
+  // Update player marker position
+  const newPosition = cellToCenter(playerCellI, playerCellJ);
+  playerMarker.setLatLng(newPosition);
+
+  // Update map center to follow player with smooth panning
+  map.panTo(newPosition, { animate: true, duration: 0.3 });
+
+  // Update all cell visuals to reflect new interactable cells
+  for (const cell of cells.values()) {
+    updateCellVisual(cell);
+  }
+
+  statusPanelDiv.innerHTML =
+    `Moved to cell (${playerCellI}, ${playerCellJ}). Use Arrow Keys or WASD to move.`;
+}
+
+// Handle keyboard input for player movement
+document.addEventListener("keydown", (event) => {
+  let newI = playerCellI;
+  let newJ = playerCellJ;
+  let moved = false;
+
+  // Arrow keys or WASD
+  // i affects latitude (north-south): increasing i moves north
+  // j affects longitude (east-west): increasing j moves east
+  if (
+    event.key === "ArrowUp" || event.key === "w" || event.key === "W"
+  ) {
+    // Move north (up): increase i
+    newI += 1;
+    moved = true;
+  } else if (
+    event.key === "ArrowDown" || event.key === "s" || event.key === "S"
+  ) {
+    // Move south (down): decrease i
+    newI -= 1;
+    moved = true;
+  } else if (
+    event.key === "ArrowLeft" || event.key === "a" || event.key === "A"
+  ) {
+    // Move west (left): decrease j
+    newJ -= 1;
+    moved = true;
+  } else if (
+    event.key === "ArrowRight" || event.key === "d" || event.key === "D"
+  ) {
+    // Move east (right): increase j
+    newJ += 1;
+    moved = true;
+  }
+
+  if (moved) {
+    // Prevent default scrolling behavior
+    event.preventDefault();
+    movePlayer(newI, newJ);
+  }
+});
+
+// Initialize status panel and inventory
+statusPanelDiv.innerHTML =
+  `Ready to play! Tokens spawned: ${tokenCount}. Use Arrow Keys or WASD to move.`;
+updateInventoryDisplay();

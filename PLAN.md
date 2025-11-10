@@ -34,7 +34,7 @@ Key gameplay challenge: Can players collect and craft tokens from nearby locatio
   - Calculate distance to determine interactable cells (about 3 cells away)
   - Ensure consistent initial state across page loads
 
-- [ ] **Step 3: Implement inventory, crafting, and win condition**
+- [x] **Step 3: Implement inventory, crafting, and win condition**
   - Create inventory system to hold at most one token
   - Display current inventory (token value) clearly on screen
   - Implement token pickup: remove token from cell when picked up
