@@ -113,7 +113,8 @@ function isInteractable(i: number, j: number): boolean {
 function spawnTokenInCell(cell: Cell): void {
   // Use deterministic luck to determine if token spawns
   const spawnKey = `${cell.i},${cell.j}`;
-  if (luck(spawnKey) < TOKEN_SPAWN_PROBABILITY) {
+  const luckValue = luck(spawnKey);
+  if (luckValue < TOKEN_SPAWN_PROBABILITY) {
     // Determine token value using deterministic luck
     const valueKey = `${cell.i},${cell.j},initialValue`;
     const tokenValue = Math.floor(luck(valueKey) * 8) + 1; // Values 1-8
@@ -149,9 +150,9 @@ function updateCellVisual(cell: Cell): void {
       const icon = leaflet.divIcon({
         className: "token-marker",
         html:
-          `<div style="background-color: gold; border: 2px solid black; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">${cell.tokenValue}</div>`,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
+          `<div style="background-color: gold; border: 3px solid black; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; color: black; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${cell.tokenValue}</div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
       });
       cell.marker = leaflet.marker(center, { icon });
       cell.marker.addTo(map);
@@ -160,9 +161,9 @@ function updateCellVisual(cell: Cell): void {
       const icon = leaflet.divIcon({
         className: "token-marker",
         html:
-          `<div style="background-color: gold; border: 2px solid black; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">${cell.tokenValue}</div>`,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
+          `<div style="background-color: gold; border: 3px solid black; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; color: black; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${cell.tokenValue}</div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
       });
       cell.marker.setIcon(icon);
     }
@@ -224,13 +225,17 @@ function handleCellClick(cell: Cell): void {
 }
 
 // Create grid of cells covering visible area
+let tokenCount = 0;
 for (let i = -VISIBLE_GRID_SIZE; i < VISIBLE_GRID_SIZE; i++) {
   for (let j = -VISIBLE_GRID_SIZE; j < VISIBLE_GRID_SIZE; j++) {
     const cellKey = `${i},${j}`;
     const cell = createCell(i, j);
     cells.set(cellKey, cell);
+    if (cell.tokenValue !== null) {
+      tokenCount++;
+    }
   }
 }
 
 // Initialize status panel
-statusPanelDiv.innerHTML = "Ready to play!";
+statusPanelDiv.innerHTML = `Ready to play! Tokens spawned: ${tokenCount}`;

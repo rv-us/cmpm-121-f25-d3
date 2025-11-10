@@ -10,3 +10,12 @@
   width: 100%;
   height: 80vh;
 }
+
+.token-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.token-marker div {
+  pointer-events: none;
+}
