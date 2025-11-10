@@ -105,7 +105,8 @@ function cellDistance(i1: number, j1: number, i2: number, j2: number): number {
 
 // Check if a cell is within interaction distance
 function isInteractable(i: number, j: number): boolean {
-  return cellDistance(i, j, PLAYER_CELL_I, PLAYER_CELL_J) <= INTERACTION_DISTANCE;
+  return cellDistance(i, j, PLAYER_CELL_I, PLAYER_CELL_J) <=
+    INTERACTION_DISTANCE;
 }
 
 // Spawn token in a cell using deterministic luck function
@@ -147,7 +148,8 @@ function updateCellVisual(cell: Cell): void {
       const center = cellToCenter(cell.i, cell.j);
       const icon = leaflet.divIcon({
         className: "token-marker",
-        html: `<div style="background-color: gold; border: 2px solid black; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">${cell.tokenValue}</div>`,
+        html:
+          `<div style="background-color: gold; border: 2px solid black; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">${cell.tokenValue}</div>`,
         iconSize: [20, 20],
         iconAnchor: [10, 10],
       });
@@ -157,7 +159,8 @@ function updateCellVisual(cell: Cell): void {
       // Update existing marker
       const icon = leaflet.divIcon({
         className: "token-marker",
-        html: `<div style="background-color: gold; border: 2px solid black; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">${cell.tokenValue}</div>`,
+        html:
+          `<div style="background-color: gold; border: 2px solid black; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">${cell.tokenValue}</div>`,
         iconSize: [20, 20],
         iconAnchor: [10, 10],
       });
@@ -207,12 +210,14 @@ function createCell(i: number, j: number): Cell {
 // Handle cell click
 function handleCellClick(cell: Cell): void {
   if (!isInteractable(cell.i, cell.j)) {
-    statusPanelDiv.innerHTML = "Too far away! You can only interact with nearby cells.";
+    statusPanelDiv.innerHTML =
+      "Too far away! You can only interact with nearby cells.";
     return;
   }
 
   if (cell.tokenValue !== null) {
-    statusPanelDiv.innerHTML = `Cell (${cell.i}, ${cell.j}) contains token with value ${cell.tokenValue}.`;
+    statusPanelDiv.innerHTML =
+      `Cell (${cell.i}, ${cell.j}) contains token with value ${cell.tokenValue}.`;
   } else {
     statusPanelDiv.innerHTML = `Cell (${cell.i}, ${cell.j}) is empty.`;
   }
