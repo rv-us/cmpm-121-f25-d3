@@ -9,6 +9,7 @@ import "./style.css";
 import "./_leafletWorkaround.ts";
 
 // Import our luck function
+import luck from "./_luck.ts";
 
 // Classroom location (fixed player position)
 const CLASSROOM_LATLNG = leaflet.latLng(
@@ -19,7 +20,8 @@ const CLASSROOM_LATLNG = leaflet.latLng(
 // Game parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const CELL_SIZE = 0.0001; // degrees per cell (about the size of a house)
-const _INTERACTION_DISTANCE = 3; // cells away player can interact (will be used in Step 2)
+const INTERACTION_DISTANCE = 3; // cells away player can interact
+const TOKEN_SPAWN_PROBABILITY = 0.1; // probability of token spawning in a cell
 
 // Create UI elements
 const statusPanelDiv = document.createElement("div");
@@ -64,10 +66,15 @@ interface Cell {
   j: number;
   rectangle: leaflet.Rectangle;
   tokenValue: number | null;
+  marker: leaflet.Marker | null; // Visual marker for token
 }
 
 // Store all cells
 const cells = new Map<string, Cell>();
+
+// Player is at cell (0, 0)
+const PLAYER_CELL_I = 0;
+const PLAYER_CELL_J = 0;
 
 // Convert cell coordinates (i, j) to lat/lng bounds
 function cellToBounds(i: number, j: number): leaflet.LatLngBounds {
@@ -83,6 +90,88 @@ function cellToBounds(i: number, j: number): leaflet.LatLngBounds {
   ]);
 }
 
+// Get center point of a cell
+function cellToCenter(i: number, j: number): leaflet.LatLng {
+  return leaflet.latLng(
+    CLASSROOM_LATLNG.lat + (i + 0.5) * CELL_SIZE,
+    CLASSROOM_LATLNG.lng + (j + 0.5) * CELL_SIZE,
+  );
+}
+
+// Calculate distance between two cells (Manhattan distance)
+function cellDistance(i1: number, j1: number, i2: number, j2: number): number {
+  return Math.abs(i1 - i2) + Math.abs(j1 - j2);
+}
+
+// Check if a cell is within interaction distance
+function isInteractable(i: number, j: number): boolean {
+  return cellDistance(i, j, PLAYER_CELL_I, PLAYER_CELL_J) <= INTERACTION_DISTANCE;
+}
+
+// Spawn token in a cell using deterministic luck function
+function spawnTokenInCell(cell: Cell): void {
+  // Use deterministic luck to determine if token spawns
+  const spawnKey = `${cell.i},${cell.j}`;
+  if (luck(spawnKey) < TOKEN_SPAWN_PROBABILITY) {
+    // Determine token value using deterministic luck
+    const valueKey = `${cell.i},${cell.j},initialValue`;
+    const tokenValue = Math.floor(luck(valueKey) * 8) + 1; // Values 1-8
+    cell.tokenValue = tokenValue;
+    updateCellVisual(cell);
+  }
+}
+
+// Update cell visual appearance based on state
+function updateCellVisual(cell: Cell): void {
+  const isInteract = isInteractable(cell.i, cell.j);
+  const hasToken = cell.tokenValue !== null;
+
+  // Update rectangle style based on interactability
+  if (isInteract) {
+    cell.rectangle.setStyle({
+      color: "#ff3388",
+      weight: 2,
+      fillOpacity: 0.2,
+    });
+  } else {
+    cell.rectangle.setStyle({
+      color: "#3388ff",
+      weight: 1,
+      fillOpacity: 0.1,
+    });
+  }
+
+  // Update token marker
+  if (hasToken && cell.tokenValue !== null) {
+    if (cell.marker === null) {
+      const center = cellToCenter(cell.i, cell.j);
+      const icon = leaflet.divIcon({
+        className: "token-marker",
+        html: `<div style="background-color: gold; border: 2px solid black; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">${cell.tokenValue}</div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      });
+      cell.marker = leaflet.marker(center, { icon });
+      cell.marker.addTo(map);
+    } else {
+      // Update existing marker
+      const icon = leaflet.divIcon({
+        className: "token-marker",
+        html: `<div style="background-color: gold; border: 2px solid black; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">${cell.tokenValue}</div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      });
+      cell.marker.setIcon(icon);
+    }
+  } else {
+    // Remove marker if no token
+    if (cell.marker !== null) {
+      cell.marker.removeFrom(map);
+      cell.marker = null;
+    }
+  }
+}
+
 // Create a cell at grid position (i, j)
 function createCell(i: number, j: number): Cell {
   const bounds = cellToBounds(i, j);
@@ -93,12 +182,40 @@ function createCell(i: number, j: number): Cell {
   });
   rectangle.addTo(map);
 
-  return {
+  const cell: Cell = {
     i,
     j,
     rectangle,
-    tokenValue: null, // Will be set in Step 2
+    tokenValue: null,
+    marker: null,
   };
+
+  // Spawn token using deterministic luck
+  spawnTokenInCell(cell);
+
+  // Add click handler
+  rectangle.on("click", () => {
+    handleCellClick(cell);
+  });
+
+  // Update visual appearance
+  updateCellVisual(cell);
+
+  return cell;
+}
+
+// Handle cell click
+function handleCellClick(cell: Cell): void {
+  if (!isInteractable(cell.i, cell.j)) {
+    statusPanelDiv.innerHTML = "Too far away! You can only interact with nearby cells.";
+    return;
+  }
+
+  if (cell.tokenValue !== null) {
+    statusPanelDiv.innerHTML = `Cell (${cell.i}, ${cell.j}) contains token with value ${cell.tokenValue}.`;
+  } else {
+    statusPanelDiv.innerHTML = `Cell (${cell.i}, ${cell.j}) is empty.`;
+  }
 }
 
 // Create grid of cells covering visible area

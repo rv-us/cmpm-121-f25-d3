@@ -27,7 +27,7 @@ Key gameplay challenge: Can players collect and craft tokens from nearby locatio
   - Render grid of cells covering visible map area
   - Set up UI elements (status panel, inventory display)
 
-- [ ] **Step 2: Implement token spawning, display, and interaction system**
+- [x] **Step 2: Implement token spawning, display, and interaction system**
   - Use deterministic luck function to spawn tokens in cells
   - Display cell contents (token presence and value) visually without clicks
   - Implement click handlers for cells
