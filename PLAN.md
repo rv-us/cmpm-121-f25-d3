@@ -1,9 +1,11 @@
 # D3: Token Collection and Crafting Game
 
 # Game Design Vision
+
 A map-based game where players collect tokens from grid cells on an interactive map centered on their location. Players can pick up tokens from nearby cells and craft them by combining tokens of equal value to create tokens of double the value. The goal is to craft a token of sufficiently high value (e.g., 8 or 16) through strategic collection and crafting. Token spawning is deterministic using a hashing mechanism, ensuring consistent gameplay across sessions.
 
 # Technologies
+
 - TypeScript for most game code, little to no explicit HTML, and all CSS collected in common `style.css` file
 - Deno and Vite for building
 - Leaflet for interactive map rendering
@@ -12,6 +14,7 @@ A map-based game where players collect tokens from grid cells on an interactive 
 # Assignments
 
 ## D3.a: Core mechanics (token collection and crafting)
+
 Key technical challenge: Can you assemble a map-based user interface using the Leaflet mapping framework?
 Key gameplay challenge: Can players collect and craft tokens from nearby locations to finally make one of sufficiently high value?
 
@@ -36,7 +39,7 @@ Key gameplay challenge: Can players collect and craft tokens from nearby locatio
 - [ ] test and refine user experience
 
 ## D3.b: (To be determined)
+
 ### Steps
 
 - [ ] ...
-
