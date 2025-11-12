@@ -353,7 +353,7 @@ function movePlayer(newCellId: CellId): void {
 
 // Handle keyboard input for player movement
 document.addEventListener("keydown", (event) => {
-  let newCellId: CellId = { ...playerCellId };
+  const newCellId: CellId = { ...playerCellId };
   let moved = false;
 
   // Arrow keys or WASD
