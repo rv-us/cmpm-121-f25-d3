@@ -257,7 +257,16 @@ function updateInventoryDisplay(): void {
     if (WIN_TOKEN_VALUES.includes(playerInventory)) {
       inventoryPanelDiv.innerHTML +=
         ` 🎉 WIN! You have a token of value ${playerInventory}!`;
-      statusPanelDiv.innerHTML = "Congratulations! You've won the game!";
+      statusPanelDiv.innerHTML =
+        `Congratulations! You've won the game with a token of value ${playerInventory}!`;
+    } else {
+      // Show progress toward win condition
+      const maxWinValue = Math.max(...WIN_TOKEN_VALUES);
+      if (playerInventory >= maxWinValue / 2) {
+        inventoryPanelDiv.innerHTML += ` (Goal: ${
+          WIN_TOKEN_VALUES.join(" or ")
+        } - Keep crafting!)`;
+      }
     }
   } else {
     inventoryPanelDiv.innerHTML = "Inventory: Empty";
@@ -527,5 +536,7 @@ map.on("moveend", () => {
 
 // Initialize status panel and inventory
 statusPanelDiv.innerHTML =
-  `Ready to play! Use Arrow Keys, WASD, or buttons to move.`;
+  `Ready to play! Use Arrow Keys, WASD, or buttons to move. Drag map to explore. Goal: Craft a token of value ${
+    WIN_TOKEN_VALUES.join(" or ")
+  }.`;
 updateInventoryDisplay();

@@ -67,7 +67,7 @@ Key gameplay challenge: Can players explore the globe and farm tokens by moving 
   - Update interactable cells based on player position (not map view)
   - Keep player marker visible when scrolling
 
-- [ ] **Step 4: Update win condition and test farming mechanics**
+- [x] **Step 4: Update win condition and test farming mechanics**
   - Increase win condition threshold to higher token value
   - Test that cells reset when moving away and back (farming works)
   - Refine gameplay and user experience
