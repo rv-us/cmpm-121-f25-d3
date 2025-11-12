@@ -55,7 +55,7 @@ Key gameplay challenge: Can players explore the globe and farm tokens by moving 
   - Implement functions to convert cell identifiers to lat/lng bounds
   - Update existing code to use new coordinate system
 
-- [ ] **Step 2: Add movement buttons and implement cell spawning/despawning**
+- [x] **Step 2: Add movement buttons and implement cell spawning/despawning**
   - Add UI buttons for north/south/east/west movement
   - Implement cell spawning/despawning based on visible map area
   - Make cells memoryless (reset state when despawned, allowing token farming)

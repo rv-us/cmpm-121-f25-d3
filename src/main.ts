@@ -36,6 +36,10 @@ const inventoryPanelDiv = document.createElement("div");
 inventoryPanelDiv.id = "inventoryPanel";
 document.body.append(inventoryPanelDiv);
 
+const controlPanelDiv = document.createElement("div");
+controlPanelDiv.id = "controlPanel";
+document.body.append(controlPanelDiv);
+
 const mapDiv = document.createElement("div");
 mapDiv.id = "map";
 document.body.append(mapDiv);
@@ -71,9 +75,7 @@ const playerMarker = leaflet.marker(CLASSROOM_LATLNG);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
-// Calculate visible bounds to determine grid size
-// We'll create a large grid that covers the visible area
-const VISIBLE_GRID_SIZE = 50; // cells in each direction from center
+// Cells are created dynamically based on visible map area
 
 // Cell identifier type - represents a cell in the global grid
 interface CellId {
@@ -130,8 +132,8 @@ const cells = new Map<string, Cell>();
 // Inventory system - player can hold at most one token
 let playerInventory: number | null = null;
 
-// Win condition values
-const WIN_TOKEN_VALUES = [8, 16];
+// Win condition values (increased since players can craft higher values)
+const WIN_TOKEN_VALUES = [32, 64];
 
 // Calculate distance between two cells (Manhattan distance)
 function cellDistance(cellId1: CellId, cellId2: CellId): number {
@@ -314,22 +316,71 @@ function handleCellInteraction(cell: Cell): void {
   }
 }
 
-// Create grid of cells covering visible area around player starting position
-let tokenCount = 0;
-for (let i = -VISIBLE_GRID_SIZE; i < VISIBLE_GRID_SIZE; i++) {
-  for (let j = -VISIBLE_GRID_SIZE; j < VISIBLE_GRID_SIZE; j++) {
-    const cellId: CellId = {
-      i: playerCellId.i + i,
-      j: playerCellId.j + j,
-    };
-    const cellKey = cellIdToKey(cellId);
-    const cell = createCell(cellId);
-    cells.set(cellKey, cell);
-    if (cell.tokenValue !== null) {
-      tokenCount++;
+// Remove a cell from the map (despawn)
+function removeCell(cell: Cell): void {
+  cell.rectangle.removeFrom(map);
+  if (cell.marker !== null) {
+    cell.marker.removeFrom(map);
+  }
+  cells.delete(cellIdToKey(cell.cellId));
+}
+
+// Get visible cell bounds based on map view
+function getVisibleCellBounds(): {
+  minI: number;
+  maxI: number;
+  minJ: number;
+  maxJ: number;
+} {
+  const bounds = map.getBounds();
+  const sw = bounds.getSouthWest();
+  const ne = bounds.getNorthEast();
+
+  // Add padding to ensure cells are visible at edges
+  const padding = CELL_SIZE * 2;
+  const minI = Math.floor((sw.lat - padding) / CELL_SIZE);
+  const maxI = Math.ceil((ne.lat + padding) / CELL_SIZE);
+  const minJ = Math.floor((sw.lng - padding) / CELL_SIZE);
+  const maxJ = Math.ceil((ne.lng + padding) / CELL_SIZE);
+
+  return { minI, maxI, minJ, maxJ };
+}
+
+// Update cells based on visible map area (spawn/despawn as needed)
+function updateVisibleCells(): void {
+  const visibleBounds = getVisibleCellBounds();
+  const visibleCellKeys = new Set<string>();
+
+  // Spawn cells that should be visible
+  for (let i = visibleBounds.minI; i <= visibleBounds.maxI; i++) {
+    for (let j = visibleBounds.minJ; j <= visibleBounds.maxJ; j++) {
+      const cellId: CellId = { i, j };
+      const cellKey = cellIdToKey(cellId);
+      visibleCellKeys.add(cellKey);
+
+      if (!cells.has(cellKey)) {
+        // Spawn new cell (memoryless - always starts fresh)
+        const cell = createCell(cellId);
+        cells.set(cellKey, cell);
+      }
     }
   }
+
+  // Despawn cells that are no longer visible
+  for (const [cellKey, cell] of cells.entries()) {
+    if (!visibleCellKeys.has(cellKey)) {
+      removeCell(cell);
+    }
+  }
+
+  // Update visuals for all visible cells
+  for (const cell of cells.values()) {
+    updateCellVisual(cell);
+  }
 }
+
+// Initialize cells for starting view
+updateVisibleCells();
 
 // Move player to a new cell position
 function movePlayer(newCellId: CellId): void {
@@ -342,13 +393,54 @@ function movePlayer(newCellId: CellId): void {
   // Update map center to follow player with smooth panning
   map.panTo(newPosition, { animate: true, duration: 0.3 });
 
-  // Update all cell visuals to reflect new interactable cells
-  for (const cell of cells.values()) {
-    updateCellVisual(cell);
-  }
+  // Update visible cells (will spawn/despawn as needed)
+  updateVisibleCells();
 
   statusPanelDiv.innerHTML =
-    `Moved to cell (${playerCellId.i}, ${playerCellId.j}). Use Arrow Keys or WASD to move.`;
+    `Moved to cell (${playerCellId.i}, ${playerCellId.j}). Use Arrow Keys, WASD, or buttons to move.`;
+}
+
+// Create movement buttons
+function createMovementButtons(): void {
+  const buttonContainer = document.createElement("div");
+  buttonContainer.style.display = "flex";
+  buttonContainer.style.gap = "10px";
+  buttonContainer.style.padding = "10px";
+  buttonContainer.style.flexWrap = "wrap";
+
+  const northButton = document.createElement("button");
+  northButton.textContent = "North (↑)";
+  northButton.addEventListener("click", () => {
+    const newCellId: CellId = { ...playerCellId, i: playerCellId.i + 1 };
+    movePlayer(newCellId);
+  });
+
+  const southButton = document.createElement("button");
+  southButton.textContent = "South (↓)";
+  southButton.addEventListener("click", () => {
+    const newCellId: CellId = { ...playerCellId, i: playerCellId.i - 1 };
+    movePlayer(newCellId);
+  });
+
+  const eastButton = document.createElement("button");
+  eastButton.textContent = "East (→)";
+  eastButton.addEventListener("click", () => {
+    const newCellId: CellId = { ...playerCellId, j: playerCellId.j + 1 };
+    movePlayer(newCellId);
+  });
+
+  const westButton = document.createElement("button");
+  westButton.textContent = "West (←)";
+  westButton.addEventListener("click", () => {
+    const newCellId: CellId = { ...playerCellId, j: playerCellId.j - 1 };
+    movePlayer(newCellId);
+  });
+
+  buttonContainer.appendChild(northButton);
+  buttonContainer.appendChild(southButton);
+  buttonContainer.appendChild(eastButton);
+  buttonContainer.appendChild(westButton);
+  controlPanelDiv.appendChild(buttonContainer);
 }
 
 // Handle keyboard input for player movement
@@ -392,7 +484,15 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// Create movement buttons
+createMovementButtons();
+
+// Handle map movement to update visible cells
+map.on("moveend", () => {
+  updateVisibleCells();
+});
+
 // Initialize status panel and inventory
 statusPanelDiv.innerHTML =
-  `Ready to play! Tokens spawned: ${tokenCount}. Use Arrow Keys or WASD to move.`;
+  `Ready to play! Use Arrow Keys, WASD, or buttons to move.`;
 updateInventoryDisplay();
