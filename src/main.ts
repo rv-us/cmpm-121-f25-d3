@@ -52,6 +52,7 @@ const initialPlayerCellId = latLngToCellId(
 let playerCellId: CellId = { ...initialPlayerCellId };
 
 // Create the map (will be centered on player position after cells are created)
+// Allow dragging so player can scroll map without moving character
 const map = leaflet.map(mapDiv, {
   center: CLASSROOM_LATLNG,
   zoom: GAMEPLAY_ZOOM_LEVEL,
@@ -59,6 +60,7 @@ const map = leaflet.map(mapDiv, {
   maxZoom: GAMEPLAY_ZOOM_LEVEL,
   zoomControl: false,
   scrollWheelZoom: false,
+  dragging: true, // Allow map dragging
 });
 
 // Add background tile layer
@@ -383,21 +385,30 @@ function updateVisibleCells(): void {
 updateVisibleCells();
 
 // Move player to a new cell position
-function movePlayer(newCellId: CellId): void {
+function movePlayer(newCellId: CellId, followWithMap = true): void {
+  isPlayerMoving = true;
   playerCellId = newCellId;
 
   // Update player marker position
   const newPosition = cellIdToCenter(playerCellId);
   playerMarker.setLatLng(newPosition);
 
-  // Update map center to follow player with smooth panning
-  map.panTo(newPosition, { animate: true, duration: 0.3 });
+  // Optionally update map center to follow player with smooth panning
+  // (only when player moves via buttons/keyboard, not when map is dragged)
+  if (followWithMap) {
+    map.panTo(newPosition, { animate: true, duration: 0.3 });
+  }
 
   // Update visible cells (will spawn/despawn as needed)
   updateVisibleCells();
 
+  // Update interactable cells based on player position (not map view)
+  for (const cell of cells.values()) {
+    updateCellVisual(cell);
+  }
+
   statusPanelDiv.innerHTML =
-    `Moved to cell (${playerCellId.i}, ${playerCellId.j}). Use Arrow Keys, WASD, or buttons to move.`;
+    `Player at cell (${playerCellId.i}, ${playerCellId.j}). Use Arrow Keys, WASD, or buttons to move. Drag map to explore.`;
 }
 
 // Create movement buttons
@@ -412,34 +423,43 @@ function createMovementButtons(): void {
   northButton.textContent = "North (↑)";
   northButton.addEventListener("click", () => {
     const newCellId: CellId = { ...playerCellId, i: playerCellId.i + 1 };
-    movePlayer(newCellId);
+    movePlayer(newCellId, true); // Follow with map
   });
 
   const southButton = document.createElement("button");
   southButton.textContent = "South (↓)";
   southButton.addEventListener("click", () => {
     const newCellId: CellId = { ...playerCellId, i: playerCellId.i - 1 };
-    movePlayer(newCellId);
+    movePlayer(newCellId, true); // Follow with map
   });
 
   const eastButton = document.createElement("button");
   eastButton.textContent = "East (→)";
   eastButton.addEventListener("click", () => {
     const newCellId: CellId = { ...playerCellId, j: playerCellId.j + 1 };
-    movePlayer(newCellId);
+    movePlayer(newCellId, true); // Follow with map
   });
 
   const westButton = document.createElement("button");
   westButton.textContent = "West (←)";
   westButton.addEventListener("click", () => {
     const newCellId: CellId = { ...playerCellId, j: playerCellId.j - 1 };
-    movePlayer(newCellId);
+    movePlayer(newCellId, true); // Follow with map
+  });
+
+  // Add button to center map on player
+  const centerButton = document.createElement("button");
+  centerButton.textContent = "Center on Player";
+  centerButton.addEventListener("click", () => {
+    const playerPosition = cellIdToCenter(playerCellId);
+    map.panTo(playerPosition, { animate: true, duration: 0.3 });
   });
 
   buttonContainer.appendChild(northButton);
   buttonContainer.appendChild(southButton);
   buttonContainer.appendChild(eastButton);
   buttonContainer.appendChild(westButton);
+  buttonContainer.appendChild(centerButton);
   controlPanelDiv.appendChild(buttonContainer);
 }
 
@@ -480,16 +500,29 @@ document.addEventListener("keydown", (event) => {
   if (moved) {
     // Prevent default scrolling behavior
     event.preventDefault();
-    movePlayer(newCellId);
+    movePlayer(newCellId, true); // Follow with map when using keyboard
   }
 });
+
+// Track if player is moving to prevent map drag from interfering
+let isPlayerMoving = false;
 
 // Create movement buttons
 createMovementButtons();
 
 // Handle map movement to update visible cells
+// When map is dragged, update cells but don't move player
 map.on("moveend", () => {
-  updateVisibleCells();
+  // Only update visible cells, don't move player
+  // Player position is independent of map view
+  if (!isPlayerMoving) {
+    updateVisibleCells();
+    // Update interactable cells based on player position (not map view)
+    for (const cell of cells.values()) {
+      updateCellVisual(cell);
+    }
+  }
+  isPlayerMoving = false;
 });
 
 // Initialize status panel and inventory

@@ -61,7 +61,7 @@ Key gameplay challenge: Can players explore the globe and farm tokens by moving 
   - Make cells memoryless (reset state when despawned, allowing token farming)
   - Ensure cells are visible all the way to map edges
 
-- [ ] **Step 3: Implement map scrolling without moving character**
+- [x] **Step 3: Implement map scrolling without moving character**
   - Allow map panning without moving player position
   - Handle Leaflet moveend event to detect map movement
   - Update interactable cells based on player position (not map view)
