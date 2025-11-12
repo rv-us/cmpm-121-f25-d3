@@ -11,7 +11,11 @@ import "./_leafletWorkaround.ts";
 // Import our luck function
 import luck from "./_luck.ts";
 
-// Classroom location (fixed player position)
+// Null Island (0,0) - anchor point for coordinate system
+// Cells are calculated relative to Null Island (0,0)
+const _NULL_ISLAND = leaflet.latLng(0, 0);
+
+// Classroom location (starting player position)
 const CLASSROOM_LATLNG = leaflet.latLng(
   36.997936938057016,
   -122.05703507501151,
@@ -36,7 +40,14 @@ const mapDiv = document.createElement("div");
 mapDiv.id = "map";
 document.body.append(mapDiv);
 
-// Create the map
+// Player position (starts at classroom location converted to cell coordinates)
+const initialPlayerCellId = latLngToCellId(
+  CLASSROOM_LATLNG.lat,
+  CLASSROOM_LATLNG.lng,
+);
+let playerCellId: CellId = { ...initialPlayerCellId };
+
+// Create the map (will be centered on player position after cells are created)
 const map = leaflet.map(mapDiv, {
   center: CLASSROOM_LATLNG,
   zoom: GAMEPLAY_ZOOM_LEVEL,
@@ -55,7 +66,7 @@ leaflet
   })
   .addTo(map);
 
-// Add player marker
+// Add player marker (will be positioned based on playerCellId)
 const playerMarker = leaflet.marker(CLASSROOM_LATLNG);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
@@ -64,10 +75,50 @@ playerMarker.addTo(map);
 // We'll create a large grid that covers the visible area
 const VISIBLE_GRID_SIZE = 50; // cells in each direction from center
 
+// Cell identifier type - represents a cell in the global grid
+interface CellId {
+  i: number; // latitude cell index
+  j: number; // longitude cell index
+}
+
+// Convert CellId to string key for Map
+function cellIdToKey(cellId: CellId): string {
+  return `${cellId.i},${cellId.j}`;
+}
+
+// Convert latitude/longitude to cell identifier (based on Null Island)
+function latLngToCellId(lat: number, lng: number): CellId {
+  return {
+    i: Math.floor(lat / CELL_SIZE),
+    j: Math.floor(lng / CELL_SIZE),
+  };
+}
+
+// Convert cell identifier to latitude/longitude bounds
+function cellIdToBounds(cellId: CellId): leaflet.LatLngBounds {
+  return leaflet.latLngBounds([
+    [
+      cellId.i * CELL_SIZE,
+      cellId.j * CELL_SIZE,
+    ],
+    [
+      (cellId.i + 1) * CELL_SIZE,
+      (cellId.j + 1) * CELL_SIZE,
+    ],
+  ]);
+}
+
+// Get center point of a cell from cell identifier
+function cellIdToCenter(cellId: CellId): leaflet.LatLng {
+  return leaflet.latLng(
+    (cellId.i + 0.5) * CELL_SIZE,
+    (cellId.j + 0.5) * CELL_SIZE,
+  );
+}
+
 // Cell data structure to track cell state
 interface Cell {
-  i: number;
-  j: number;
+  cellId: CellId;
   rectangle: leaflet.Rectangle;
   tokenValue: number | null;
   marker: leaflet.Marker | null; // Visual marker for token
@@ -76,57 +127,30 @@ interface Cell {
 // Store all cells
 const cells = new Map<string, Cell>();
 
-// Player position (starts at cell 0, 0)
-let playerCellI = 0;
-let playerCellJ = 0;
-
 // Inventory system - player can hold at most one token
 let playerInventory: number | null = null;
 
 // Win condition values
 const WIN_TOKEN_VALUES = [8, 16];
 
-// Convert cell coordinates (i, j) to lat/lng bounds
-function cellToBounds(i: number, j: number): leaflet.LatLngBounds {
-  return leaflet.latLngBounds([
-    [
-      CLASSROOM_LATLNG.lat + i * CELL_SIZE,
-      CLASSROOM_LATLNG.lng + j * CELL_SIZE,
-    ],
-    [
-      CLASSROOM_LATLNG.lat + (i + 1) * CELL_SIZE,
-      CLASSROOM_LATLNG.lng + (j + 1) * CELL_SIZE,
-    ],
-  ]);
-}
-
-// Get center point of a cell
-function cellToCenter(i: number, j: number): leaflet.LatLng {
-  return leaflet.latLng(
-    CLASSROOM_LATLNG.lat + (i + 0.5) * CELL_SIZE,
-    CLASSROOM_LATLNG.lng + (j + 0.5) * CELL_SIZE,
-  );
-}
-
 // Calculate distance between two cells (Manhattan distance)
-function cellDistance(i1: number, j1: number, i2: number, j2: number): number {
-  return Math.abs(i1 - i2) + Math.abs(j1 - j2);
+function cellDistance(cellId1: CellId, cellId2: CellId): number {
+  return Math.abs(cellId1.i - cellId2.i) + Math.abs(cellId1.j - cellId2.j);
 }
 
 // Check if a cell is within interaction distance
-function isInteractable(i: number, j: number): boolean {
-  return cellDistance(i, j, playerCellI, playerCellJ) <=
-    INTERACTION_DISTANCE;
+function isInteractable(cellId: CellId): boolean {
+  return cellDistance(cellId, playerCellId) <= INTERACTION_DISTANCE;
 }
 
 // Spawn token in a cell using deterministic luck function
 function spawnTokenInCell(cell: Cell): void {
   // Use deterministic luck to determine if token spawns
-  const spawnKey = `${cell.i},${cell.j}`;
+  const spawnKey = cellIdToKey(cell.cellId);
   const luckValue = luck(spawnKey);
   if (luckValue < TOKEN_SPAWN_PROBABILITY) {
     // Determine token value using deterministic luck
-    const valueKey = `${cell.i},${cell.j},initialValue`;
+    const valueKey = `${spawnKey},initialValue`;
     const tokenValue = Math.floor(luck(valueKey) * 8) + 1; // Values 1-8
     cell.tokenValue = tokenValue;
     updateCellVisual(cell);
@@ -135,7 +159,7 @@ function spawnTokenInCell(cell: Cell): void {
 
 // Update cell visual appearance based on state
 function updateCellVisual(cell: Cell): void {
-  const isInteract = isInteractable(cell.i, cell.j);
+  const isInteract = isInteractable(cell.cellId);
   const hasToken = cell.tokenValue !== null;
 
   // Update rectangle style based on interactability
@@ -156,7 +180,7 @@ function updateCellVisual(cell: Cell): void {
   // Update token marker
   if (hasToken && cell.tokenValue !== null) {
     if (cell.marker === null) {
-      const center = cellToCenter(cell.i, cell.j);
+      const center = cellIdToCenter(cell.cellId);
       const icon = leaflet.divIcon({
         className: "token-marker",
         html:
@@ -190,9 +214,9 @@ function updateCellVisual(cell: Cell): void {
   }
 }
 
-// Create a cell at grid position (i, j)
-function createCell(i: number, j: number): Cell {
-  const bounds = cellToBounds(i, j);
+// Create a cell at grid position
+function createCell(cellId: CellId): Cell {
+  const bounds = cellIdToBounds(cellId);
   const rectangle = leaflet.rectangle(bounds, {
     color: "#3388ff",
     weight: 1,
@@ -201,8 +225,7 @@ function createCell(i: number, j: number): Cell {
   rectangle.addTo(map);
 
   const cell: Cell = {
-    i,
-    j,
+    cellId,
     rectangle,
     tokenValue: null,
     marker: null,
@@ -249,7 +272,7 @@ function handleCellClick(cell: Cell): void {
 
 // Common handler for cell/token interactions
 function handleCellInteraction(cell: Cell): void {
-  if (!isInteractable(cell.i, cell.j)) {
+  if (!isInteractable(cell.cellId)) {
     statusPanelDiv.innerHTML =
       "Too far away! You can only interact with nearby cells.";
     return;
@@ -265,7 +288,7 @@ function handleCellInteraction(cell: Cell): void {
       updateCellVisual(cell);
       updateInventoryDisplay();
       statusPanelDiv.innerHTML =
-        `Crafted! Created token with value ${newValue} in cell (${cell.i}, ${cell.j}).`;
+        `Crafted! Created token with value ${newValue} in cell (${cell.cellId.i}, ${cell.cellId.j}).`;
     } else {
       statusPanelDiv.innerHTML =
         `Cannot craft! Cell has token value ${cell.tokenValue}, but you have ${playerInventory}. Tokens must match to craft.`;
@@ -280,22 +303,27 @@ function handleCellInteraction(cell: Cell): void {
     updateCellVisual(cell);
     updateInventoryDisplay();
     statusPanelDiv.innerHTML =
-      `Picked up token with value ${playerInventory} from cell (${cell.i}, ${cell.j}).`;
+      `Picked up token with value ${playerInventory} from cell (${cell.cellId.i}, ${cell.cellId.j}).`;
     return;
   }
 
   // If both are empty
   if (playerInventory === null && cell.tokenValue === null) {
-    statusPanelDiv.innerHTML = `Cell (${cell.i}, ${cell.j}) is empty.`;
+    statusPanelDiv.innerHTML =
+      `Cell (${cell.cellId.i}, ${cell.cellId.j}) is empty.`;
   }
 }
 
-// Create grid of cells covering visible area
+// Create grid of cells covering visible area around player starting position
 let tokenCount = 0;
 for (let i = -VISIBLE_GRID_SIZE; i < VISIBLE_GRID_SIZE; i++) {
   for (let j = -VISIBLE_GRID_SIZE; j < VISIBLE_GRID_SIZE; j++) {
-    const cellKey = `${i},${j}`;
-    const cell = createCell(i, j);
+    const cellId: CellId = {
+      i: playerCellId.i + i,
+      j: playerCellId.j + j,
+    };
+    const cellKey = cellIdToKey(cellId);
+    const cell = createCell(cellId);
     cells.set(cellKey, cell);
     if (cell.tokenValue !== null) {
       tokenCount++;
@@ -304,12 +332,11 @@ for (let i = -VISIBLE_GRID_SIZE; i < VISIBLE_GRID_SIZE; i++) {
 }
 
 // Move player to a new cell position
-function movePlayer(newI: number, newJ: number): void {
-  playerCellI = newI;
-  playerCellJ = newJ;
+function movePlayer(newCellId: CellId): void {
+  playerCellId = newCellId;
 
   // Update player marker position
-  const newPosition = cellToCenter(playerCellI, playerCellJ);
+  const newPosition = cellIdToCenter(playerCellId);
   playerMarker.setLatLng(newPosition);
 
   // Update map center to follow player with smooth panning
@@ -321,13 +348,12 @@ function movePlayer(newI: number, newJ: number): void {
   }
 
   statusPanelDiv.innerHTML =
-    `Moved to cell (${playerCellI}, ${playerCellJ}). Use Arrow Keys or WASD to move.`;
+    `Moved to cell (${playerCellId.i}, ${playerCellId.j}). Use Arrow Keys or WASD to move.`;
 }
 
 // Handle keyboard input for player movement
 document.addEventListener("keydown", (event) => {
-  let newI = playerCellI;
-  let newJ = playerCellJ;
+  let newCellId: CellId = { ...playerCellId };
   let moved = false;
 
   // Arrow keys or WASD
@@ -337,32 +363,32 @@ document.addEventListener("keydown", (event) => {
     event.key === "ArrowUp" || event.key === "w" || event.key === "W"
   ) {
     // Move north (up): increase i
-    newI += 1;
+    newCellId.i += 1;
     moved = true;
   } else if (
     event.key === "ArrowDown" || event.key === "s" || event.key === "S"
   ) {
     // Move south (down): decrease i
-    newI -= 1;
+    newCellId.i -= 1;
     moved = true;
   } else if (
     event.key === "ArrowLeft" || event.key === "a" || event.key === "A"
   ) {
     // Move west (left): decrease j
-    newJ -= 1;
+    newCellId.j -= 1;
     moved = true;
   } else if (
     event.key === "ArrowRight" || event.key === "d" || event.key === "D"
   ) {
     // Move east (right): increase j
-    newJ += 1;
+    newCellId.j += 1;
     moved = true;
   }
 
   if (moved) {
     // Prevent default scrolling behavior
     event.preventDefault();
-    movePlayer(newI, newJ);
+    movePlayer(newCellId);
   }
 });
 

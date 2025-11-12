@@ -42,8 +42,32 @@ Key gameplay challenge: Can players collect and craft tokens from nearby locatio
   - Implement win condition detection (token of value 8 or 16 in inventory)
   - Test and refine user experience
 
-## D3.b: (To be determined)
+## D3.b: Globe-spanning Gameplay
+
+Key technical challenge: Can you implement an earth-spanning coordinate system and dynamic cell spawning/despawning?
+Key gameplay challenge: Can players explore the globe and farm tokens by moving in and out of cell visibility?
 
 ### Steps
 
-- [ ] ...
+- [x] **Step 1: Implement Null Island coordinate system and cell identifier type**
+  - Create CellId interface/type for grid cells independent of screen representation
+  - Implement functions to convert lat/lng to cell identifiers based on Null Island (0,0)
+  - Implement functions to convert cell identifiers to lat/lng bounds
+  - Update existing code to use new coordinate system
+
+- [ ] **Step 2: Add movement buttons and implement cell spawning/despawning**
+  - Add UI buttons for north/south/east/west movement
+  - Implement cell spawning/despawning based on visible map area
+  - Make cells memoryless (reset state when despawned, allowing token farming)
+  - Ensure cells are visible all the way to map edges
+
+- [ ] **Step 3: Implement map scrolling without moving character**
+  - Allow map panning without moving player position
+  - Handle Leaflet moveend event to detect map movement
+  - Update interactable cells based on player position (not map view)
+  - Keep player marker visible when scrolling
+
+- [ ] **Step 4: Update win condition and test farming mechanics**
+  - Increase win condition threshold to higher token value
+  - Test that cells reset when moving away and back (farming works)
+  - Refine gameplay and user experience
