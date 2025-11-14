@@ -120,7 +120,11 @@ function cellIdToCenter(cellId: CellId): leaflet.LatLng {
   );
 }
 
-// Cell data structure to track cell state
+// Flyweight pattern: Separate cell coordinates from cell state
+// Store only modified cell states (Memento pattern will use this)
+const cellState = new Map<string, number | null>();
+
+// Cell visual representation (only for visible cells)
 interface Cell {
   cellId: CellId;
   rectangle: leaflet.Rectangle;
@@ -128,8 +132,8 @@ interface Cell {
   marker: leaflet.Marker | null; // Visual marker for token
 }
 
-// Store all cells
-const cells = new Map<string, Cell>();
+// Store only visible cells (visual representation)
+const visibleCells = new Map<string, Cell>();
 
 // Inventory system - player can hold at most one token
 let playerInventory: number | null = null;
@@ -147,17 +151,51 @@ function isInteractable(cellId: CellId): boolean {
   return cellDistance(cellId, playerCellId) <= INTERACTION_DISTANCE;
 }
 
-// Spawn token in a cell using deterministic luck function
-function spawnTokenInCell(cell: Cell): void {
-  // Use deterministic luck to determine if token spawns
-  const spawnKey = cellIdToKey(cell.cellId);
+// Get cell token value (Flyweight: check stored state first, then generate)
+function getCellTokenValue(cellId: CellId): number | null {
+  const cellKey = cellIdToKey(cellId);
+
+  // Check if cell has been modified (stored state)
+  if (cellState.has(cellKey)) {
+    return cellState.get(cellKey)!;
+  }
+
+  // Otherwise, generate from deterministic luck (unmodified cells don't need storage)
+  const spawnKey = cellKey;
   const luckValue = luck(spawnKey);
   if (luckValue < TOKEN_SPAWN_PROBABILITY) {
     // Determine token value using deterministic luck
     const valueKey = `${spawnKey},initialValue`;
     const tokenValue = Math.floor(luck(valueKey) * 8) + 1; // Values 1-8
-    cell.tokenValue = tokenValue;
-    updateCellVisual(cell);
+    return tokenValue;
+  }
+
+  return null;
+}
+
+// Store cell state (only for modified cells - Flyweight pattern)
+function setCellTokenValue(cellId: CellId, tokenValue: number | null): void {
+  const cellKey = cellIdToKey(cellId);
+
+  // If setting to null, check if it was originally null (unmodified)
+  if (tokenValue === null) {
+    // Check if cell was already stored (modified)
+    if (cellState.has(cellKey)) {
+      // Was modified, now setting to null - keep the null state
+      cellState.set(cellKey, null);
+    } else {
+      // Was unmodified, check original generated value
+      const spawnKey = cellKey;
+      const luckValue = luck(spawnKey);
+      if (luckValue < TOKEN_SPAWN_PROBABILITY) {
+        // Originally had a token, now empty - store null
+        cellState.set(cellKey, null);
+      }
+      // Otherwise originally empty and still empty - no need to store
+    }
+  } else {
+    // Setting to a value - always store (cell is modified)
+    cellState.set(cellKey, tokenValue);
   }
 }
 
@@ -218,7 +256,7 @@ function updateCellVisual(cell: Cell): void {
   }
 }
 
-// Create a cell at grid position
+// Create a cell visual representation at grid position (Flyweight pattern)
 function createCell(cellId: CellId): Cell {
   const bounds = cellIdToBounds(cellId);
   const rectangle = leaflet.rectangle(bounds, {
@@ -228,15 +266,15 @@ function createCell(cellId: CellId): Cell {
   });
   rectangle.addTo(map);
 
+  // Get token value from stored state or generate (Flyweight)
+  const tokenValue = getCellTokenValue(cellId);
+
   const cell: Cell = {
     cellId,
     rectangle,
-    tokenValue: null,
+    tokenValue,
     marker: null,
   };
-
-  // Spawn token using deterministic luck
-  spawnTokenInCell(cell);
 
   // Add click handler
   rectangle.on("click", () => {
@@ -296,6 +334,8 @@ function handleCellInteraction(cell: Cell): void {
     if (playerInventory === cell.tokenValue) {
       // Craft: combine two tokens of equal value to create double value
       const newValue = playerInventory * 2;
+      // Store modified state (Flyweight pattern)
+      setCellTokenValue(cell.cellId, newValue);
       cell.tokenValue = newValue;
       playerInventory = null; // Remove token from inventory
       updateCellVisual(cell);
@@ -312,6 +352,8 @@ function handleCellInteraction(cell: Cell): void {
   // If player has no token and cell has a token, pick it up
   if (playerInventory === null && cell.tokenValue !== null) {
     playerInventory = cell.tokenValue;
+    // Store modified state (cell now empty - Flyweight pattern)
+    setCellTokenValue(cell.cellId, null);
     cell.tokenValue = null; // Remove token from cell
     updateCellVisual(cell);
     updateInventoryDisplay();
@@ -327,13 +369,14 @@ function handleCellInteraction(cell: Cell): void {
   }
 }
 
-// Remove a cell from the map (despawn)
+// Remove a cell visual representation from the map (despawn)
+// State is preserved in cellState Map (Flyweight pattern)
 function removeCell(cell: Cell): void {
   cell.rectangle.removeFrom(map);
   if (cell.marker !== null) {
     cell.marker.removeFrom(map);
   }
-  cells.delete(cellIdToKey(cell.cellId));
+  visibleCells.delete(cellIdToKey(cell.cellId));
 }
 
 // Get visible cell bounds based on map view
@@ -358,6 +401,7 @@ function getVisibleCellBounds(): {
 }
 
 // Update cells based on visible map area (spawn/despawn as needed)
+// Flyweight pattern: only visible cells have visual representation
 function updateVisibleCells(): void {
   const visibleBounds = getVisibleCellBounds();
   const visibleCellKeys = new Set<string>();
@@ -369,23 +413,28 @@ function updateVisibleCells(): void {
       const cellKey = cellIdToKey(cellId);
       visibleCellKeys.add(cellKey);
 
-      if (!cells.has(cellKey)) {
-        // Spawn new cell (memoryless - always starts fresh)
+      if (!visibleCells.has(cellKey)) {
+        // Create visual representation (state restored from cellState if modified)
         const cell = createCell(cellId);
-        cells.set(cellKey, cell);
+        visibleCells.set(cellKey, cell);
+      } else {
+        // Update existing visible cell (restore state if needed)
+        const cell = visibleCells.get(cellKey)!;
+        cell.tokenValue = getCellTokenValue(cellId);
+        updateCellVisual(cell);
       }
     }
   }
 
-  // Despawn cells that are no longer visible
-  for (const [cellKey, cell] of cells.entries()) {
+  // Despawn cells that are no longer visible (state preserved in cellState)
+  for (const [cellKey, cell] of visibleCells.entries()) {
     if (!visibleCellKeys.has(cellKey)) {
       removeCell(cell);
     }
   }
 
   // Update visuals for all visible cells
-  for (const cell of cells.values()) {
+  for (const cell of visibleCells.values()) {
     updateCellVisual(cell);
   }
 }
@@ -412,7 +461,7 @@ function movePlayer(newCellId: CellId, followWithMap = true): void {
   updateVisibleCells();
 
   // Update interactable cells based on player position (not map view)
-  for (const cell of cells.values()) {
+  for (const cell of visibleCells.values()) {
     updateCellVisual(cell);
   }
 
@@ -527,7 +576,7 @@ map.on("moveend", () => {
   if (!isPlayerMoving) {
     updateVisibleCells();
     // Update interactable cells based on player position (not map view)
-    for (const cell of cells.values()) {
+    for (const cell of visibleCells.values()) {
       updateCellVisual(cell);
     }
   }

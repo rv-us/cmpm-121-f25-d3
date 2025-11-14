@@ -79,7 +79,7 @@ Key gameplay challenge: Can cells remember their state when scrolled off-screen 
 
 ### Steps
 
-- [ ] **Step 1: Implement Flyweight pattern for cell storage**
+- [x] **Step 1: Implement Flyweight pattern for cell storage**
   - Separate cell coordinates (CellId) from cell state (token value)
   - Use Map<CellId, tokenValue> to store only modified cells
   - Unmodified cells don't require memory storage
