@@ -121,8 +121,48 @@ function cellIdToCenter(cellId: CellId): leaflet.LatLng {
 }
 
 // Flyweight pattern: Separate cell coordinates from cell state
-// Store only modified cell states (Memento pattern will use this)
+// Memento pattern: Store only modified cell states for persistence
 const cellState = new Map<string, number | null>();
+
+// Memento pattern: Serialize cell state to a plain object
+// (Will be used in D3.d for page load persistence)
+function _serializeCellState(): Record<string, number | null> {
+  const serialized: Record<string, number | null> = {};
+  for (const [key, value] of cellState.entries()) {
+    serialized[key] = value;
+  }
+  return serialized;
+}
+
+// Memento pattern: Deserialize cell state from a plain object
+// (Will be used in D3.d for page load persistence)
+function _deserializeCellState(
+  serialized: Record<string, number | null>,
+): void {
+  cellState.clear();
+  for (const [key, value] of Object.entries(serialized)) {
+    cellState.set(key, value);
+  }
+}
+
+// Memento pattern: Save cell state (called when cell scrolls off-screen)
+// State is automatically preserved in cellState Map, this is for explicit tracking
+function saveCellState(_cellId: CellId): void {
+  // State is already stored in cellState Map when modified via setCellTokenValue()
+  // This function exists for explicit Memento pattern implementation
+  // The state persists automatically in cellState Map
+}
+
+// Memento pattern: Restore cell state (called when cell returns to view)
+function restoreCellState(cellId: CellId): number | null {
+  const cellKey = cellIdToKey(cellId);
+  // Restore from cellState Map if it exists
+  if (cellState.has(cellKey)) {
+    return cellState.get(cellKey)!;
+  }
+  // Otherwise return null (will be generated from luck function)
+  return null;
+}
 
 // Cell visual representation (only for visible cells)
 interface Cell {
@@ -151,13 +191,15 @@ function isInteractable(cellId: CellId): boolean {
   return cellDistance(cellId, playerCellId) <= INTERACTION_DISTANCE;
 }
 
-// Get cell token value (Flyweight: check stored state first, then generate)
+// Get cell token value (Flyweight + Memento: check stored state first, then generate)
 function getCellTokenValue(cellId: CellId): number | null {
   const cellKey = cellIdToKey(cellId);
 
-  // Check if cell has been modified (stored state)
-  if (cellState.has(cellKey)) {
-    return cellState.get(cellKey)!;
+  // Memento pattern: Restore state if cell was previously modified
+  const restoredState = restoreCellState(cellId);
+  if (restoredState !== null || cellState.has(cellKey)) {
+    // Cell has been modified, return stored state
+    return cellState.get(cellKey) ?? null;
   }
 
   // Otherwise, generate from deterministic luck (unmodified cells don't need storage)
@@ -349,6 +391,20 @@ function handleCellInteraction(cell: Cell): void {
     return;
   }
 
+  // If player has a token and cell is empty, place/drop token
+  if (playerInventory !== null && cell.tokenValue === null) {
+    const droppedValue = playerInventory;
+    // Store modified state (cell now has token - Flyweight pattern)
+    setCellTokenValue(cell.cellId, droppedValue);
+    cell.tokenValue = droppedValue;
+    playerInventory = null; // Remove token from inventory
+    updateCellVisual(cell);
+    updateInventoryDisplay();
+    statusPanelDiv.innerHTML =
+      `Placed token with value ${droppedValue} in cell (${cell.cellId.i}, ${cell.cellId.j}).`;
+    return;
+  }
+
   // If player has no token and cell has a token, pick it up
   if (playerInventory === null && cell.tokenValue !== null) {
     playerInventory = cell.tokenValue;
@@ -370,13 +426,17 @@ function handleCellInteraction(cell: Cell): void {
 }
 
 // Remove a cell visual representation from the map (despawn)
-// State is preserved in cellState Map (Flyweight pattern)
+// Memento pattern: State is preserved in cellState Map when cell scrolls off-screen
 function removeCell(cell: Cell): void {
+  // Memento pattern: Save state before removing visual representation
+  saveCellState(cell.cellId);
+
   cell.rectangle.removeFrom(map);
   if (cell.marker !== null) {
     cell.marker.removeFrom(map);
   }
   visibleCells.delete(cellIdToKey(cell.cellId));
+  // State remains in cellState Map for persistence
 }
 
 // Get visible cell bounds based on map view
@@ -414,12 +474,14 @@ function updateVisibleCells(): void {
       visibleCellKeys.add(cellKey);
 
       if (!visibleCells.has(cellKey)) {
+        // Memento pattern: Restore state when cell returns to view
         // Create visual representation (state restored from cellState if modified)
         const cell = createCell(cellId);
         visibleCells.set(cellKey, cell);
       } else {
         // Update existing visible cell (restore state if needed)
         const cell = visibleCells.get(cellKey)!;
+        // Memento pattern: Restore state from cellState Map
         cell.tokenValue = getCellTokenValue(cellId);
         updateCellVisual(cell);
       }
