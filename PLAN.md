@@ -71,3 +71,28 @@ Key gameplay challenge: Can players explore the globe and farm tokens by moving 
   - Increase win condition threshold to higher token value
   - Test that cells reset when moving away and back (farming works)
   - Refine gameplay and user experience
+
+## D3.c: Object persistence
+
+Key technical challenge: Can you implement memory-efficient cell storage using Flyweight and Memento patterns?
+Key gameplay challenge: Can cells remember their state when scrolled off-screen and restored when they return?
+
+### Steps
+
+- [ ] **Step 1: Implement Flyweight pattern for cell storage**
+  - Separate cell coordinates (CellId) from cell state (token value)
+  - Use Map<CellId, tokenValue> to store only modified cells
+  - Unmodified cells don't require memory storage
+  - Cells not visible on map don't consume memory if unmodified
+
+- [ ] **Step 2: Implement Memento pattern for cell state persistence**
+  - Serialize modified cell states when cells scroll off-screen
+  - Deserialize and restore cell states when cells return to view
+  - Preserve token values and other cell modifications
+  - Ensure state persists across map movements (but not page loads yet)
+
+- [ ] **Step 3: Update cell rendering to rebuild from stored state**
+  - Rebuild cell display from scratch using stored Map data
+  - Restore cell state when cells become visible again
+  - Maintain visual consistency with persisted state
+  - Test that modified cells remember their state when scrolling
