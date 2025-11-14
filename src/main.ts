@@ -299,6 +299,7 @@ function updateCellVisual(cell: Cell): void {
 }
 
 // Create a cell visual representation at grid position (Flyweight pattern)
+// Step 3: Rebuilds cell display from scratch using stored Map data
 function createCell(cellId: CellId): Cell {
   const bounds = cellIdToBounds(cellId);
   const rectangle = leaflet.rectangle(bounds, {
@@ -308,7 +309,8 @@ function createCell(cellId: CellId): Cell {
   });
   rectangle.addTo(map);
 
-  // Get token value from stored state or generate (Flyweight)
+  // Step 3: Rebuild from stored state - restore token value from cellState Map
+  // Get token value from stored state or generate (Flyweight + Memento)
   const tokenValue = getCellTokenValue(cellId);
 
   const cell: Cell = {
@@ -323,7 +325,7 @@ function createCell(cellId: CellId): Cell {
     handleCellClick(cell);
   });
 
-  // Update visual appearance
+  // Step 3: Update visual appearance to maintain consistency with persisted state
   updateCellVisual(cell);
 
   return cell;
@@ -474,16 +476,22 @@ function updateVisibleCells(): void {
       visibleCellKeys.add(cellKey);
 
       if (!visibleCells.has(cellKey)) {
+        // Step 3: Rebuild cell display from scratch using stored Map data
         // Memento pattern: Restore state when cell returns to view
         // Create visual representation (state restored from cellState if modified)
         const cell = createCell(cellId);
         visibleCells.set(cellKey, cell);
       } else {
-        // Update existing visible cell (restore state if needed)
+        // Step 3: Rebuild from stored state - ensure visual consistency
+        // Update existing visible cell (restore state from cellState Map)
         const cell = visibleCells.get(cellKey)!;
         // Memento pattern: Restore state from cellState Map
-        cell.tokenValue = getCellTokenValue(cellId);
-        updateCellVisual(cell);
+        const restoredValue = getCellTokenValue(cellId);
+        // Only update if state changed (maintain visual consistency)
+        if (cell.tokenValue !== restoredValue) {
+          cell.tokenValue = restoredValue;
+          updateCellVisual(cell);
+        }
       }
     }
   }
