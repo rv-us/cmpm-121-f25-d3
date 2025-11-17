@@ -840,12 +840,28 @@ class GeolocationMovementController implements MovementController {
 
 // Current movement controller instance
 let currentMovementController: MovementController | null = null;
+let isSwitchingMode = false; // Guard to prevent recursive mode switches
 
 // Switch movement mode (Facade pattern)
 function switchMovementMode(mode: MovementMode): void {
+  // Prevent switching to the same mode (avoids unnecessary re-initialization)
+  if (currentMovementMode === mode && currentMovementController !== null) {
+    return;
+  }
+
+  // Prevent recursive calls (e.g., when geolocation fails and tries to switch)
+  if (isSwitchingMode) {
+    // Defer the switch to avoid recursion
+    setTimeout(() => switchMovementMode(mode), 0);
+    return;
+  }
+
+  isSwitchingMode = true;
+
   // Stop current controller
   if (currentMovementController) {
     currentMovementController.stop();
+    currentMovementController = null;
   }
 
   // Start new controller
@@ -856,6 +872,8 @@ function switchMovementMode(mode: MovementMode): void {
     currentMovementController = new GeolocationMovementController();
   }
   currentMovementController.start();
+
+  isSwitchingMode = false;
 
   statusPanelDiv.innerHTML =
     `Movement mode: ${mode}. Use ?movement=buttons or ?movement=geolocation in URL to switch.`;
