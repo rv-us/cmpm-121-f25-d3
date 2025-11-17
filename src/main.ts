@@ -793,9 +793,10 @@ class ButtonMovementController implements MovementController {
 }
 
 // Geolocation-based movement controller (Facade implementation)
-// Will be fully implemented in Step 3
+// Step 3: Fully implemented with error handling and state persistence
 class GeolocationMovementController implements MovementController {
   private watchId: number | null = null;
+  private lastCellId: CellId | null = null; // Track last position to avoid unnecessary updates
 
   getMode(): MovementMode {
     return "geolocation";
@@ -809,23 +810,62 @@ class GeolocationMovementController implements MovementController {
       return;
     }
 
+    // Show initial status
+    statusPanelDiv.innerHTML =
+      "Requesting location permission... Move in the real world to move your character!";
+
     // Request permission and start watching position
     this.watchId = navigator.geolocation.watchPosition(
       (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
         const newCellId = latLngToCellId(lat, lng);
-        movePlayer(newCellId, true);
+
+        // Only update if player moved to a different cell (avoid unnecessary updates)
+        if (
+          this.lastCellId === null ||
+          this.lastCellId.i !== newCellId.i ||
+          this.lastCellId.j !== newCellId.j
+        ) {
+          this.lastCellId = newCellId;
+          movePlayer(newCellId, true);
+          statusPanelDiv.innerHTML =
+            `Geolocation active! Real-world position: (${lat.toFixed(6)}, ${
+              lng.toFixed(6)
+            }). Cell: (${newCellId.i}, ${newCellId.j}).`;
+        }
       },
       (error) => {
+        // Handle different geolocation error types gracefully
+        let errorMessage = "Unknown geolocation error.";
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage =
+              "Location permission denied. Please enable location access in your browser settings.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage =
+              "Location information unavailable. Check your device's location services.";
+            break;
+          case error.TIMEOUT:
+            errorMessage = "Location request timed out. Please try again.";
+            break;
+          default:
+            errorMessage = `Geolocation error: ${error.message}`;
+            break;
+        }
+
         statusPanelDiv.innerHTML =
-          `Geolocation error: ${error.message}. Falling back to button movement.`;
-        switchMovementMode("buttons");
+          `${errorMessage} Falling back to button movement.`;
+        // Don't auto-switch on timeout, let user retry
+        if (error.code !== error.TIMEOUT) {
+          switchMovementMode("buttons");
+        }
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 1000,
-        timeout: 5000,
+        maximumAge: 2000, // Accept cached position up to 2 seconds old
+        timeout: 10000, // 10 second timeout for better reliability
       },
     );
   }
@@ -834,6 +874,7 @@ class GeolocationMovementController implements MovementController {
     if (this.watchId !== null) {
       navigator.geolocation.clearWatch(this.watchId);
       this.watchId = null;
+      this.lastCellId = null; // Reset last position
     }
   }
 }
