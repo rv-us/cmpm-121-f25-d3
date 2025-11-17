@@ -124,9 +124,20 @@ function cellIdToCenter(cellId: CellId): leaflet.LatLng {
 // Memento pattern: Store only modified cell states for persistence
 const cellState = new Map<string, number | null>();
 
+// ============================================================================
+// localStorage Persistence (Step 2: D3.d)
+// ============================================================================
+const STORAGE_KEY = "tokenGameState";
+
+// Game state interface for serialization
+interface GameState {
+  playerCellId: CellId;
+  playerInventory: number | null;
+  cellState: Record<string, number | null>;
+}
+
 // Memento pattern: Serialize cell state to a plain object
-// (Will be used in D3.d for page load persistence)
-function _serializeCellState(): Record<string, number | null> {
+function serializeCellState(): Record<string, number | null> {
   const serialized: Record<string, number | null> = {};
   for (const [key, value] of cellState.entries()) {
     serialized[key] = value;
@@ -135,13 +146,84 @@ function _serializeCellState(): Record<string, number | null> {
 }
 
 // Memento pattern: Deserialize cell state from a plain object
-// (Will be used in D3.d for page load persistence)
-function _deserializeCellState(
+function deserializeCellState(
   serialized: Record<string, number | null>,
 ): void {
   cellState.clear();
   for (const [key, value] of Object.entries(serialized)) {
     cellState.set(key, value);
+  }
+}
+
+// Save game state to localStorage
+function saveGameState(): void {
+  try {
+    const gameState: GameState = {
+      playerCellId: { ...playerCellId },
+      playerInventory: playerInventory,
+      cellState: serializeCellState(),
+    };
+    globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
+  } catch (error) {
+    console.error("Failed to save game state:", error);
+  }
+}
+
+// Load game state from localStorage
+function loadGameState(): GameState | null {
+  try {
+    const saved = globalThis.localStorage.getItem(STORAGE_KEY);
+    if (saved === null) {
+      return null;
+    }
+    const gameState: GameState = JSON.parse(saved);
+    return gameState;
+  } catch (error) {
+    console.error("Failed to load game state:", error);
+    return null;
+  }
+}
+
+// Restore game state from localStorage
+function restoreGameState(): void {
+  const gameState = loadGameState();
+  if (gameState === null) {
+    return; // No saved state, use defaults
+  }
+
+  // Restore player position
+  playerCellId = { ...gameState.playerCellId };
+  const playerPosition = cellIdToCenter(playerCellId);
+  playerMarker.setLatLng(playerPosition);
+  map.setView(playerPosition, GAMEPLAY_ZOOM_LEVEL);
+
+  // Restore inventory
+  playerInventory = gameState.playerInventory;
+  updateInventoryDisplay();
+
+  // Restore cell state
+  deserializeCellState(gameState.cellState);
+
+  statusPanelDiv.innerHTML =
+    `Game state restored! Player at cell (${playerCellId.i}, ${playerCellId.j}).`;
+}
+
+// Clear saved game state (New Game)
+function clearGameState(): void {
+  try {
+    globalThis.localStorage.removeItem(STORAGE_KEY);
+    // Reset to initial state
+    playerCellId = { ...initialPlayerCellId };
+    const playerPosition = cellIdToCenter(playerCellId);
+    playerMarker.setLatLng(playerPosition);
+    map.setView(playerPosition, GAMEPLAY_ZOOM_LEVEL);
+    playerInventory = null;
+    cellState.clear();
+    updateInventoryDisplay();
+    updateVisibleCells();
+    statusPanelDiv.innerHTML = "New game started!";
+  } catch (error) {
+    console.error("Failed to clear game state:", error);
   }
 }
 
@@ -384,6 +466,7 @@ function handleCellInteraction(cell: Cell): void {
       playerInventory = null; // Remove token from inventory
       updateCellVisual(cell);
       updateInventoryDisplay();
+      saveGameState(); // Persist state after crafting
       statusPanelDiv.innerHTML =
         `Crafted! Created token with value ${newValue} in cell (${cell.cellId.i}, ${cell.cellId.j}).`;
     } else {
@@ -402,6 +485,7 @@ function handleCellInteraction(cell: Cell): void {
     playerInventory = null; // Remove token from inventory
     updateCellVisual(cell);
     updateInventoryDisplay();
+    saveGameState(); // Persist state after dropping token
     statusPanelDiv.innerHTML =
       `Placed token with value ${droppedValue} in cell (${cell.cellId.i}, ${cell.cellId.j}).`;
     return;
@@ -415,6 +499,7 @@ function handleCellInteraction(cell: Cell): void {
     cell.tokenValue = null; // Remove token from cell
     updateCellVisual(cell);
     updateInventoryDisplay();
+    saveGameState(); // Persist state after picking up token
     statusPanelDiv.innerHTML =
       `Picked up token with value ${playerInventory} from cell (${cell.cellId.i}, ${cell.cellId.j}).`;
     return;
@@ -509,6 +594,9 @@ function updateVisibleCells(): void {
   }
 }
 
+// Restore game state from localStorage (if available)
+restoreGameState();
+
 // Initialize cells for starting view
 updateVisibleCells();
 
@@ -534,6 +622,9 @@ function movePlayer(newCellId: CellId, followWithMap = true): void {
   for (const cell of visibleCells.values()) {
     updateCellVisual(cell);
   }
+
+  // Save game state after movement
+  saveGameState();
 
   statusPanelDiv.innerHTML =
     `Player at cell (${playerCellId.i}, ${playerCellId.j}). Use Arrow Keys, WASD, or buttons to move. Drag map to explore.`;
@@ -593,12 +684,28 @@ function createMovementButtons(): void {
     switchMovementMode(newMode);
   });
 
+  // Add "New Game" button to clear saved state
+  const newGameButton = document.createElement("button");
+  newGameButton.textContent = "New Game";
+  newGameButton.style.backgroundColor = "#ff4444";
+  newGameButton.style.color = "white";
+  newGameButton.addEventListener("click", () => {
+    if (
+      confirm(
+        "Are you sure you want to start a new game? This will clear all saved progress.",
+      )
+    ) {
+      clearGameState();
+    }
+  });
+
   buttonContainer.appendChild(northButton);
   buttonContainer.appendChild(southButton);
   buttonContainer.appendChild(eastButton);
   buttonContainer.appendChild(westButton);
   buttonContainer.appendChild(centerButton);
   buttonContainer.appendChild(modeSwitchButton);
+  buttonContainer.appendChild(newGameButton);
   controlPanelDiv.appendChild(buttonContainer);
 }
 

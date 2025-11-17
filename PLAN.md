@@ -111,7 +111,7 @@ Key gameplay challenge: Can players move their character by moving in the real w
   - Add runtime control to switch between movement modes (button or query string)
   - Update game code to use movement facade instead of direct controls
 
-- [ ] **Step 2: Implement localStorage persistence for game state**
+- [x] **Step 2: Implement localStorage persistence for game state**
   - Serialize cellState Map and player state to localStorage
   - Deserialize and restore game state on page load
   - Persist player position, inventory, and modified cells
