@@ -620,7 +620,7 @@ interface MovementController {
 
 // Get movement mode from query string or default to buttons
 function getMovementModeFromQuery(): MovementMode {
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(globalThis.location.search);
   const mode = params.get("movement");
   if (mode === "geolocation") {
     return "geolocation";
