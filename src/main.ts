@@ -539,7 +539,7 @@ function movePlayer(newCellId: CellId, followWithMap = true): void {
     `Player at cell (${playerCellId.i}, ${playerCellId.j}). Use Arrow Keys, WASD, or buttons to move. Drag map to explore.`;
 }
 
-// Create movement buttons
+// Create movement buttons (used by button movement mode)
 function createMovementButtons(): void {
   const buttonContainer = document.createElement("div");
   buttonContainer.style.display = "flex";
@@ -583,60 +583,182 @@ function createMovementButtons(): void {
     map.panTo(playerPosition, { animate: true, duration: 0.3 });
   });
 
+  // Add button to switch movement modes
+  const modeSwitchButton = document.createElement("button");
+  modeSwitchButton.textContent = "Switch Movement Mode";
+  modeSwitchButton.addEventListener("click", () => {
+    const newMode: MovementMode = currentMovementMode === "buttons"
+      ? "geolocation"
+      : "buttons";
+    switchMovementMode(newMode);
+  });
+
   buttonContainer.appendChild(northButton);
   buttonContainer.appendChild(southButton);
   buttonContainer.appendChild(eastButton);
   buttonContainer.appendChild(westButton);
   buttonContainer.appendChild(centerButton);
+  buttonContainer.appendChild(modeSwitchButton);
   controlPanelDiv.appendChild(buttonContainer);
 }
-
-// Handle keyboard input for player movement
-document.addEventListener("keydown", (event) => {
-  const newCellId: CellId = { ...playerCellId };
-  let moved = false;
-
-  // Arrow keys or WASD
-  // i affects latitude (north-south): increasing i moves north
-  // j affects longitude (east-west): increasing j moves east
-  if (
-    event.key === "ArrowUp" || event.key === "w" || event.key === "W"
-  ) {
-    // Move north (up): increase i
-    newCellId.i += 1;
-    moved = true;
-  } else if (
-    event.key === "ArrowDown" || event.key === "s" || event.key === "S"
-  ) {
-    // Move south (down): decrease i
-    newCellId.i -= 1;
-    moved = true;
-  } else if (
-    event.key === "ArrowLeft" || event.key === "a" || event.key === "A"
-  ) {
-    // Move west (left): decrease j
-    newCellId.j -= 1;
-    moved = true;
-  } else if (
-    event.key === "ArrowRight" || event.key === "d" || event.key === "D"
-  ) {
-    // Move east (right): increase j
-    newCellId.j += 1;
-    moved = true;
-  }
-
-  if (moved) {
-    // Prevent default scrolling behavior
-    event.preventDefault();
-    movePlayer(newCellId, true); // Follow with map when using keyboard
-  }
-});
 
 // Track if player is moving to prevent map drag from interfering
 let isPlayerMoving = false;
 
-// Create movement buttons
+// ============================================================================
+// Facade Pattern: Player Movement Control
+// ============================================================================
+// Movement mode type
+type MovementMode = "buttons" | "geolocation";
+
+// Movement control interface (Facade pattern)
+interface MovementController {
+  start(): void;
+  stop(): void;
+  getMode(): MovementMode;
+}
+
+// Get movement mode from query string or default to buttons
+function getMovementModeFromQuery(): MovementMode {
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get("movement");
+  if (mode === "geolocation") {
+    return "geolocation";
+  }
+  return "buttons";
+}
+
+// Current movement mode
+let currentMovementMode: MovementMode = getMovementModeFromQuery();
+
+// Button-based movement controller (Facade implementation)
+class ButtonMovementController implements MovementController {
+  private keyboardHandler: ((event: KeyboardEvent) => void) | null = null;
+
+  getMode(): MovementMode {
+    return "buttons";
+  }
+
+  start(): void {
+    // Keyboard input handler
+    this.keyboardHandler = (event: KeyboardEvent) => {
+      const newCellId: CellId = { ...playerCellId };
+      let moved = false;
+
+      // Arrow keys or WASD
+      if (
+        event.key === "ArrowUp" || event.key === "w" || event.key === "W"
+      ) {
+        newCellId.i += 1;
+        moved = true;
+      } else if (
+        event.key === "ArrowDown" || event.key === "s" || event.key === "S"
+      ) {
+        newCellId.i -= 1;
+        moved = true;
+      } else if (
+        event.key === "ArrowLeft" || event.key === "a" || event.key === "A"
+      ) {
+        newCellId.j -= 1;
+        moved = true;
+      } else if (
+        event.key === "ArrowRight" || event.key === "d" || event.key === "D"
+      ) {
+        newCellId.j += 1;
+        moved = true;
+      }
+
+      if (moved) {
+        event.preventDefault();
+        movePlayer(newCellId, true);
+      }
+    };
+
+    document.addEventListener("keydown", this.keyboardHandler);
+  }
+
+  stop(): void {
+    if (this.keyboardHandler) {
+      document.removeEventListener("keydown", this.keyboardHandler);
+      this.keyboardHandler = null;
+    }
+  }
+}
+
+// Geolocation-based movement controller (Facade implementation)
+// Will be fully implemented in Step 3
+class GeolocationMovementController implements MovementController {
+  private watchId: number | null = null;
+
+  getMode(): MovementMode {
+    return "geolocation";
+  }
+
+  start(): void {
+    if (!navigator.geolocation) {
+      statusPanelDiv.innerHTML =
+        "Geolocation is not supported by your browser. Falling back to button movement.";
+      switchMovementMode("buttons");
+      return;
+    }
+
+    // Request permission and start watching position
+    this.watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const newCellId = latLngToCellId(lat, lng);
+        movePlayer(newCellId, true);
+      },
+      (error) => {
+        statusPanelDiv.innerHTML =
+          `Geolocation error: ${error.message}. Falling back to button movement.`;
+        switchMovementMode("buttons");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 5000,
+      },
+    );
+  }
+
+  stop(): void {
+    if (this.watchId !== null) {
+      navigator.geolocation.clearWatch(this.watchId);
+      this.watchId = null;
+    }
+  }
+}
+
+// Current movement controller instance
+let currentMovementController: MovementController | null = null;
+
+// Switch movement mode (Facade pattern)
+function switchMovementMode(mode: MovementMode): void {
+  // Stop current controller
+  if (currentMovementController) {
+    currentMovementController.stop();
+  }
+
+  // Start new controller
+  currentMovementMode = mode;
+  if (mode === "buttons") {
+    currentMovementController = new ButtonMovementController();
+  } else {
+    currentMovementController = new GeolocationMovementController();
+  }
+  currentMovementController.start();
+
+  statusPanelDiv.innerHTML =
+    `Movement mode: ${mode}. Use ?movement=buttons or ?movement=geolocation in URL to switch.`;
+}
+
+// Create movement buttons (always visible, but only active in button mode)
 createMovementButtons();
+
+// Initialize movement controller based on query string or default
+switchMovementMode(currentMovementMode);
 
 // Handle map movement to update visible cells
 // When map is dragged, update cells but don't move player

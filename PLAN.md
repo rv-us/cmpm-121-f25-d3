@@ -104,7 +104,7 @@ Key gameplay challenge: Can players move their character by moving in the real w
 
 ### Steps
 
-- [ ] **Step 1: Implement Facade pattern for player movement**
+- [x] **Step 1: Implement Facade pattern for player movement**
   - Create movement interface to abstract movement control
   - Implement button-based movement behind facade
   - Implement geolocation-based movement behind facade
