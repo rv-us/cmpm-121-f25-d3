@@ -96,3 +96,31 @@ Key gameplay challenge: Can cells remember their state when scrolled off-screen 
   - Restore cell state when cells become visible again
   - Maintain visual consistency with persisted state
   - Test that modified cells remember their state when scrolling
+
+## D3.d: Gameplay Across Real-world Space and Time
+
+Key technical challenge: Can you implement geolocation-based movement and localStorage persistence using Facade pattern?
+Key gameplay challenge: Can players move their character by moving in the real world and continue gameplay across page loads?
+
+### Steps
+
+- [ ] **Step 1: Implement Facade pattern for player movement**
+  - Create movement interface to abstract movement control
+  - Implement button-based movement behind facade
+  - Implement geolocation-based movement behind facade
+  - Add runtime control to switch between movement modes (button or query string)
+  - Update game code to use movement facade instead of direct controls
+
+- [ ] **Step 2: Implement localStorage persistence for game state**
+  - Serialize cellState Map and player state to localStorage
+  - Deserialize and restore game state on page load
+  - Persist player position, inventory, and modified cells
+  - Add "New Game" functionality to clear saved state
+  - Ensure state persists across page loads
+
+- [ ] **Step 3: Integrate geolocation API for real-world movement**
+  - Use browser geolocation API to track device position
+  - Convert real-world lat/lng to cell coordinates
+  - Update player position based on geolocation changes
+  - Handle geolocation errors and permissions gracefully
+  - Test real-world movement and state persistence
