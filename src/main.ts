@@ -797,12 +797,28 @@ class ButtonMovementController implements MovementController {
 class GeolocationMovementController implements MovementController {
   private watchId: number | null = null;
   private lastCellId: CellId | null = null; // Track last position to avoid unnecessary updates
+  private keyboardBlocker: ((event: KeyboardEvent) => void) | null = null;
 
   getMode(): MovementMode {
     return "geolocation";
   }
 
   start(): void {
+    // Block arrow keys in geolocation mode (only real-world movement allowed)
+    this.keyboardBlocker = (event: KeyboardEvent) => {
+      // Prevent arrow keys from moving player in geolocation mode
+      if (
+        event.key === "ArrowUp" ||
+        event.key === "ArrowDown" ||
+        event.key === "ArrowLeft" ||
+        event.key === "ArrowRight"
+      ) {
+        event.preventDefault();
+        // Optionally show a message that arrow keys are disabled in this mode
+        // (but don't spam the status panel on every keypress)
+      }
+    };
+    document.addEventListener("keydown", this.keyboardBlocker);
     if (!navigator.geolocation) {
       statusPanelDiv.innerHTML =
         "Geolocation is not supported by your browser. Falling back to button movement.";
@@ -875,6 +891,11 @@ class GeolocationMovementController implements MovementController {
       navigator.geolocation.clearWatch(this.watchId);
       this.watchId = null;
       this.lastCellId = null; // Reset last position
+    }
+    // Remove keyboard blocker
+    if (this.keyboardBlocker) {
+      document.removeEventListener("keydown", this.keyboardBlocker);
+      this.keyboardBlocker = null;
     }
   }
 }
